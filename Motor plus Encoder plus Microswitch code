@@ -1,0 +1,289 @@
+/*LIBRARIES*/
+#include <Wire.h>
+#include <Adafruit_MotorShield.h>
+#include "utility/Adafruit_MS_PWMServoDriver.h"
+#include <SPI.h>
+
+int LED=31;
+unsigned int ENCpos;
+
+/*MOTORS*/
+/*assign names to shields. 60, 61, etc refers to each 
+ *shield based on its address (60 + binary address)*/
+Adafruit_MotorShield Shield1 = Adafruit_MotorShield(0x60);
+Adafruit_MotorShield Shield2 = Adafruit_MotorShield(0x61);
+Adafruit_MotorShield Shield3 = Adafruit_MotorShield(0x62);
+Adafruit_MotorShield Shield4 = Adafruit_MotorShield(0x63);
+
+/*set naming conventions for each motor by picking their
+ *shield and position*/
+Adafruit_DCMotor *M1 = Shield1.getMotor(4);
+Adafruit_DCMotor *M2 = Shield1.getMotor(3);
+Adafruit_DCMotor *M3 = Shield2.getMotor(4);
+Adafruit_DCMotor *M4 = Shield2.getMotor(3);
+Adafruit_DCMotor *M5 = Shield2.getMotor(2);
+Adafruit_DCMotor *M6 = Shield2.getMotor(1);
+Adafruit_DCMotor *M7 = Shield3.getMotor(3);
+
+/*ENCODERS*/
+//set SPI pin and encoder names for easy access and define 
+int Enc_MISO = 50;
+int Enc_MOSI = 51;
+int Enc_SCK = 52;
+int Enc_1_CS = 39;
+int Enc_2_CS = 41;
+int Enc_3_CS = 43;
+int Enc_4_CS = 45;
+int Enc_5_CS = 47;
+int Enc_6_CS = 49;
+
+//these variables will be used to store and report position values
+unsigned int Enc_1;
+unsigned int Enc_2;
+unsigned int Enc_3;
+unsigned int Enc_4;
+unsigned int Enc_5;
+unsigned int Enc_6;
+byte datasend = 0;
+
+
+/*MICROSWITCHES*/
+/*Switch numbers progress in line with their respective motors
+ * and go to interrupt pins*/
+int MS1 = 2;
+int MS2 = 18;
+int MS3 = 19;
+int MS4 = 20;
+int MS5 = 21;
+
+/*FUNCTIONS*/
+/*Function to read a single encoder once
+ *inputs are (ENCODER TO READ, RESULT VARIABLE TO SAVE)*/
+ 
+int pos_read(int ENCno) {
+
+  digitalWrite(ENCno, LOW);
+  SPI.transfer(0x60);   //send read position register command
+ 
+  byte  pos_bit1=SPI.transfer(0x00);
+  byte  pos_bit2=SPI.transfer(0x00);
+  byte  pos_bit3=SPI.transfer(0x00);
+  byte  pos_bit4=SPI.transfer(0x00);
+  
+  digitalWrite(ENCno, HIGH);
+unsigned int ENCpos = (pos_bit1 << 24) | (pos_bit2 << 16) | (pos_bit3 << 8) | pos_bit4;
+/*The following if loops are necessary to save the value of
+ * the encoder to the variable we want. Putting the correct
+ * variable in at the input level doesn't seem to work, and
+ * this will probably be simpler anyway. */
+if (ENCno==Enc_1_CS){
+Enc_1 = ENCpos;
+return Enc_1;}
+
+if (ENCno==Enc_2_CS){
+Enc_2 = ENCpos;
+return Enc_2;}
+
+if (ENCno==Enc_3_CS){
+Enc_3 = ENCpos;
+return Enc_3;}
+
+if (ENCno==Enc_4_CS){
+Enc_4 = ENCpos;
+return Enc_4;}
+
+if (ENCno==Enc_5_CS){
+Enc_5 = ENCpos;
+return Enc_5;}
+
+if (ENCno==Enc_6_CS){
+Enc_6 = ENCpos;
+return Enc_6;}
+}
+
+//Function to read position from encoder chips
+  int multi_pos_read() {
+    
+    int ENCno;
+//Read each encoder in sequence and print results
+  pos_read(Enc_1_CS);
+  pos_read(Enc_2_CS);
+  pos_read(Enc_3_CS);
+  pos_read(Enc_4_CS);
+  pos_read(Enc_5_CS);
+  pos_read(Enc_6_CS);
+  
+  digitalWrite(ENCno, LOW);
+  SPI.transfer(0x60);   //send read position register command
+
+ //set format for position read--32 bits
+  byte  pos_bit1=SPI.transfer(0x00);
+  byte  pos_bit2=SPI.transfer(0x00);
+  byte  pos_bit3=SPI.transfer(0x00);
+  byte  pos_bit4=SPI.transfer(0x00);
+
+  //shifts each byte far enough to create a 32-bit readback value. Uses logical | to add
+  digitalWrite(ENCno, HIGH);
+  unsigned int  result = (pos_bit1 << 24) | (pos_bit2 << 16) | (pos_bit3 << 8) | pos_bit4;
+  //Enc_sav = result;
+
+  
+int base = digitalRead(MS1);
+int shoulder = digitalRead(MS2);
+int elbow = digitalRead(MS3);
+int wristpitch = digitalRead(MS4);
+int wristroll = digitalRead(MS5);
+
+Serial.print(base);
+Serial.print(shoulder);
+Serial.print(elbow);
+Serial.print(wristpitch);
+Serial.println(wristroll);
+  delay(100);
+   //end of function multi_pos_read
+}
+
+/*the void function below defines a command to be called by the
+ * attachinterrupt command under void setup */
+
+int stopfn(){
+ //M2->run(FORWARD);
+ // M2->setSpeed(100);
+  //delay(2000); 
+  M2->run(RELEASE);
+  M2->setSpeed(0);
+  while(true){delay(100);}
+  //return; 
+  }
+  
+void intfn() { stopfn(); }
+  
+void setup() {
+  Serial.begin(9600);
+/* first four lines activate motor shields
+ * shield is dormant otherwise*/
+Shield1.begin();
+Shield2.begin();
+Shield3.begin();
+Shield4.begin();
+
+/*next commands activate each motor individually
+ *must be replicated for each motor attached to each shield*/
+M1->setSpeed(150);
+M1->run(FORWARD);
+M1->run(RELEASE);
+
+M2->setSpeed(150);
+M2->run(FORWARD);
+M2->run(RELEASE);
+
+M3->setSpeed(150);
+M3->run(FORWARD);
+M3->run(RELEASE);
+
+M4->setSpeed(150);
+M4->run(FORWARD);
+M4->run(RELEASE);
+
+M5->setSpeed(150);
+M5->run(FORWARD);
+M5->run(RELEASE);
+
+M6->setSpeed(150);
+M6->run(FORWARD);
+M6->run(RELEASE);
+
+M7->setSpeed(150);
+M7->run(FORWARD);
+M7->run(RELEASE);
+
+//begin serial communication, set pins and begin SPI
+Serial.begin(9600);
+
+pinMode(Enc_1_CS, OUTPUT);
+pinMode(Enc_2_CS, OUTPUT);
+pinMode(Enc_3_CS, OUTPUT);
+pinMode(Enc_4_CS, OUTPUT);
+pinMode(Enc_5_CS, OUTPUT);
+pinMode(Enc_6_CS, OUTPUT);
+
+pinMode(MS1,INPUT);
+pinMode(MS2,INPUT);
+pinMode(MS3,INPUT);
+pinMode(MS4,INPUT);
+pinMode(MS5,INPUT);
+ 
+SPI.begin();
+SPI.setBitOrder(MSBFIRST);
+
+/*initialize each encoder by sending hexbits 88 and 03 and sending 20 to set to zero
+ * initialization will delay sketch by ~.8 seconds*/
+int ENC;
+for (int i=1; i<7; i++){
+  //set variable ENC to pick correct encoder for each numerical progression
+  if(i=1){ ENC = Enc_1_CS; }
+  if(i=2){ ENC = Enc_2_CS; }
+  if(i=3){ ENC = Enc_3_CS; }
+  if(i=4){ ENC = Enc_4_CS; }
+  if(i=5){ ENC = Enc_5_CS; }
+  if(i=6){ ENC = Enc_6_CS; }
+
+  digitalWrite(ENC, LOW);
+  SPI.transfer(0x88);
+  SPI.transfer(0x03);
+  delay(100);
+  SPI.transfer(0x20);
+  digitalWrite(ENC, HIGH);
+}
+//attachInterrupt(digitalPinToInterrupt(MS2), intfn, LOW);
+pinMode(LED,OUTPUT);
+}
+
+void loop() {
+
+digitalWrite(LED,HIGH);
+
+/* while loop runs the motor until the encoder reads the given
+ * position. The loop runs 4 times per second due to the delay */
+while(Enc_2 < 6000) {
+M2->run(BACKWARD);
+delay(250);
+pos_read(Enc_2_CS);
+Serial.println(Enc_2);
+Serial.println("xxx");
+/* if loop exists in case the motor situates itself too far 
+ * back and the encoder goes below zero, looping back to 
+ * around 65000 */
+if(Enc_2 > 64000) {
+  M2->run(BACKWARD);
+  delay(1000); } }
+
+/* print next to signify moving on to the next function and
+ *  set up the variable to control the next loop */
+Serial.println("next");
+boolean S2 = digitalRead(MS2);
+
+/* this while loop causes the motor to go "home", that is to
+ *  go back in the other direction until the microswitch is 
+ *  pressed and goes to zero */
+while(S2 == 1) {
+M2->run(FORWARD);
+M2->setSpeed(200);
+delay(200);
+S2 = digitalRead(MS2);
+Serial.println(S2);
+Serial.println(". . .");
+}
+
+//stop the motor once it reaches home
+M2->run(RELEASE);
+Serial.println("done");
+
+//loop a blinking LED infinitely to signify the program is done
+while(true){
+  digitalWrite(LED,LOW);
+  delay(250);
+  digitalWrite(LED,HIGH);
+  delay(500);
+ }
+}
